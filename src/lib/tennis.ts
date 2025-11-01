@@ -22,7 +22,7 @@ import {
 export const startMatch = (): MatchState => {
 	return {
 		sets: [
-			[5, 5],
+			[0, 0],
 			[0, 0],
 			[0, 0],
 		],
@@ -46,14 +46,15 @@ export const startGame = (): GameState => {
  * Updates the current game's state, and if the game finishes,
  * updates the set and potentially the match state.
  */
+// 🎾 2. Delegate to utils to update the current game state (Normal, Deuce, Advantage, or Tiebreak)
 export const scorePoint = (state: MatchState, pointWinner: Player): MatchState => {
 	// 🛑 1. Match already has a winner → ignore inputs
 	if (state.matchWinner) return state
 
-	// 🎾 2. Update the current game (Normal, Deuce, Advantage, Tiebreak)
+	// 🎾 2. Delegate to utils to update the current game state (Normal, Deuce, Advantage, or Tiebreak)
 	const newGameState = updateGameState(state.currentGame, pointWinner)
 
-	// ✅ 3. If the game isn’t over, just update game state and return
+	// ✅ 3. If the game isn’t over, just return updated game state
 	if (newGameState.kind !== 'GameOver') {
 		return { ...state, currentGame: newGameState }
 	}
@@ -62,13 +63,13 @@ export const scorePoint = (state: MatchState, pointWinner: Player): MatchState =
 	const updatedMatch = updateSetAfterGame(state, newGameState.gameWinner)
 	const setIndex = updatedMatch.currentSet - 1
 
-	// 👇 5. If we were in a tiebreak, finalize tiebreak logic
+	// 👇 5. If this was a tiebreak game, finalize the tiebreak for the set
 	if (state.currentGame.kind === 'Tiebreak') {
 		const finishedSetIndex = state.currentSet - 1
 		return finalizeTiebreak(updatedMatch, newGameState.gameWinner, finishedSetIndex)
 	}
 
-	// 🎚 6. If the set is now 6–6, start a tiebreak
+	// If this is a non-final-set 6–6 situation, start a tiebreak
 	const [p1Games, p2Games] = updatedMatch.sets[setIndex]
 	if (p1Games === 6 && p2Games === 6) {
 		return {
@@ -84,6 +85,7 @@ export const scorePoint = (state: MatchState, pointWinner: Player): MatchState =
 /**
  * Updates the set scores after a game finishes.
  * Advances to the next set or declares a match winner if conditions are met.
+ * (Tiebreak finalization is handled separately in scorePoint)
  */
 export const updateSetAfterGame = (
 	match: MatchState,

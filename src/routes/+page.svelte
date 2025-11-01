@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { match } from 'canary-js'
 	import { startMatch, update } from '$lib/tennis'
-	import { type MatchState, type Player } from '$lib/tennis.types'
+	import { type MatchState, type Player, type ScorePair } from '$lib/tennis.types'
 
 	let matchState = $state(startMatch())
 
@@ -22,81 +23,91 @@
 	const getDisplayPoints = (
 		game: MatchState['currentGame'],
 		player: Player
-	): number | string => {
-		if (game.kind === 'Normal') {
-			return player === 'Player1'
-				? pointMap[game.player1Point]
-				: pointMap[game.player2Point]
-		}
+	): string =>
+		match(game, {
+			Normal: g =>
+				String(
+					player === 'Player1' ? pointMap[g.player1Point] : pointMap[g.player2Point]
+				),
+			Deuce: () => '40',
+			Advantage: g => (g.playerAtAdvantage === player ? 'AD' : '40'),
+			Tiebreak: g => String(player === 'Player1' ? g.p1Points : g.p2Points),
+		})
 
-		if (game.kind === 'Deuce') return 40
-
-		if (game.kind === 'Advantage')
-			return game.playerAtAdvantage === player ? 'AD' : 40
-
-		if (game.kind === 'Tiebreak')
-			return player === 'Player1' ? game.p1Points : game.p2Points
-
-		return ''
-	}
+	const isSetOver = ([p1, p2]: ScorePair): boolean =>
+		((p1 >= 6 || p2 >= 6) && Math.abs(p1 - p2) >= 2) || p1 === 7 || p2 === 7
 
 	const getSetDisplay = (match: MatchState, setIndex: number, player: Player) => {
 		const games = match.sets[setIndex]
 		const tb = match.tiebreaks[setIndex]
-
-		// Get basic games score (0 or 1 index depending on player)
 		const gameScore = player === 'Player1' ? games[0] : games[1]
 
-		// If no tiebreak, just return the game score
-		if (!tb) return gameScore
+		const winner = games[0] > games[1] ? 'Player1' : 'Player2'
 
-		// Tiebreak exists → show like "7 (5)" if player lost 7–5 tiebreak
+		const finished = isSetOver(games)
+
+		// No tiebreak → just return the game score
+		if (!tb)
+			return finished && winner === player
+				? `<strong>${gameScore}</strong>`
+				: String(gameScore)
+
+		// Tiebreak → include TB score like 7 <sup>5</sup>
 		const tbScore = player === 'Player1' ? tb[0] : tb[1]
-		return `${gameScore} (${tbScore})`
+		return finished && winner === player
+			? `<strong>${gameScore} <sup>${tbScore}</sup></strong>`
+			: `${gameScore} <sup>${tbScore}</sup>`
 	}
 </script>
 
+<h1>TS TEA-nnis 2026 (w/ Zod)</h1>	
+
 <div class="scoreboard">
 	<!-- Header Row -->
-	<div class="cell heading">Player</div>
-	<div class="cell heading">Set 1</div>
-	<div class="cell heading">Set 2</div>
-	<div class="cell heading">Set 3</div>
-	<div class="cell heading">Points</div>
+	<div class="heading">Player</div>
+	<div class="heading">Set 1</div>
+	<div class="heading">Set 2</div>
+	<div class="heading">Set 3</div>
+	<div class="heading">Points</div>
 
 	<!-- Player 1 Row -->
-	<div class="cell player">Player 1</div>
-	<div class="cell">{getSetDisplay(matchState, 0, 'Player1')}</div>
-	<div class="cell">{getSetDisplay(matchState, 1, 'Player1')}</div>
-	<div class="cell">{getSetDisplay(matchState, 2, 'Player1')}</div>
-	<div class="cell">{getDisplayPoints(matchState.currentGame, 'Player1')}</div>
+	<div class="player">Player 1</div>
+	<div>{@html getSetDisplay(matchState, 0, 'Player1')}</div>
+	<div>{@html getSetDisplay(matchState, 1, 'Player1')}</div>
+	<div>{@html getSetDisplay(matchState, 2, 'Player1')}</div>
+	<div>{getDisplayPoints(matchState.currentGame, 'Player1')}</div>
 
 	<!-- Player 2 Row -->
-	<div class="cell player">Player 2</div>
-		<div class="cell">{getSetDisplay(matchState, 0, 'Player2')}</div>
-	<div class="cell">{getSetDisplay(matchState, 1, 'Player2')}</div>
-	<div class="cell">{getSetDisplay(matchState, 2, 'Player2')}</div>
-	<div class="cell">{getDisplayPoints(matchState.currentGame, 'Player2')}</div>
+	<div class="player">Player 2</div>
+	<div>{@html getSetDisplay(matchState, 0, 'Player2')}</div>
+	<div>{@html getSetDisplay(matchState, 1, 'Player2')}</div>
+	<div>{@html getSetDisplay(matchState, 2, 'Player2')}</div>
+	<div>{getDisplayPoints(matchState.currentGame, 'Player2')}</div>
 </div>
 
 <div class="controls text-align-center flow">
-	{#if matchState}
-		<div>
-			<button onclick={evt => handlePoint(evt, 'Player1')}>Player 1</button>
-			<button onclick={evt => handlePoint(evt, 'Player2')}>Player 2</button>
-			{#if matchState.matchWinner}
-				<button onclick={resetMatch}>New Match</button>
-			{/if}
-		</div>
+	{#if matchState?.matchWinner}
+		<button onclick={resetMatch}>New Match</button>
+	{:else}
+		<button
+			disabled={!!matchState.matchWinner}
+			onclick={evt => handlePoint(evt, 'Player1')}>Player 1</button
+		>
+		<button
+			disabled={!!matchState.matchWinner}
+			onclick={evt => handlePoint(evt, 'Player2')}>Player 2</button
+		>
 	{/if}
 </div>
 
-<details>
-	<summary>MatchState Object</summary>
-	<pre>{JSON.stringify(matchState, null, 2)}</pre>
-</details>
+<div class="text-align-center"><a href="https://github.com/bmehder/ts-tennis-2026" target="_blank">GitHub Repo</a></div>
 
 <style>
+	h1 {
+		margin-block: var(--size-2-5);
+		text-align: center;
+	}
+
 	.scoreboard {
 		display: grid;
 		grid-template-columns: 1.5fr repeat(3, 1fr) 1fr; /* Player column wider */
@@ -106,6 +117,7 @@
 		margin-block: var(--size);
 		margin-inline: auto;
 		background: #f9f9f9;
+		color: initial;
 		text-align: center;
 		border: 1px solid #ccc;
 		border-radius: var(--size-0-5);
@@ -129,7 +141,7 @@
 	}
 
 	/* Remove bottom border on last row */
-	.scoreboard .cell:nth-last-child(-n + 5) {
+	.scoreboard > div:nth-last-child(-n + 5) {
 		border-bottom: none;
 	}
 </style>

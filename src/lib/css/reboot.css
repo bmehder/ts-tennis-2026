@@ -219,7 +219,7 @@ button,
 
 button:hover,
 .button:hover {
-  background-color: color-mix(in srgb, dodgerblue 40%, black);
+  /* background-color: color-mix(in srgb, dodgerblue 20%, black); */
 	text-decoration: none;
 }
 
@@ -237,7 +237,10 @@ button:active,
 /* Disabled state */
 button:disabled,
 .button[aria-disabled='true'] {
-  background-color: color-mix(in srgb, dodgerblue 40%, black);
 	cursor: not-allowed;
 	opacity: 0.7;
+}
+
+a {
+  color: white;
 }
