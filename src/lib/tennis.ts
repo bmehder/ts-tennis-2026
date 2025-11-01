@@ -1,84 +1,23 @@
 // This module models a complete tennis scoring system (best of 3 sets, including tiebreaks).
-
 import { z } from 'zod'
 import { match, identity } from 'canary-js'
+import {
+	updateSetWithGameWinner,
+	didPlayerWinMatch,
+	setWinner,
+} from './tennis.utils'
 
-/* ============================= */
-/*   🎾 TYPES & ENUMS             */
-/* ============================= */
-
-// Represents the possible points before deuce in a game
-const PreDeucePoint = z.enum(['LOVE', 'FIFTEEN', 'THIRTY', 'FORTY'])
-type PreDeucePoint = z.infer<typeof PreDeucePoint>
-
-// Represents the two players in the match
-const Player = z.enum(['Player1', 'Player2'])
-export type Player = z.infer<typeof Player>
-
-const NonNegativeInt = z.number().int().nonnegative()
-
-/* ============================= */
-/*   🎾 SCHEMAS                  */
-/* ============================= */
-
-// Represents the state of a single game in the match
-const GameState = z.discriminatedUnion('kind', [
-	z.object({
-		kind: z.literal('Normal'),
-		player1Point: PreDeucePoint,
-		player2Point: PreDeucePoint,
-	}),
-	z.object({
-		kind: z.literal('Deuce'),
-	}),
-	z.object({
-		kind: z.literal('Advantage'),
-		playerAtAdvantage: Player,
-	}),
-	z.object({
-		kind: z.literal('GameOver'),
-		gameWinner: Player,
-	}),
-	z.object({
-		kind: z.literal('Tiebreak'),
-		p1Points: NonNegativeInt,
-		p2Points: NonNegativeInt,
-	}),
-])
-type GameState = z.infer<typeof GameState>
-
-// Represents the overall state of the match including sets, current game, and winner if any
-const MatchState = z.object({
-	sets: z.tuple([
-		z.tuple([NonNegativeInt, NonNegativeInt]),
-		z.tuple([NonNegativeInt, NonNegativeInt]),
-		z.tuple([NonNegativeInt, NonNegativeInt]),
-	]),
-	tiebreaks: z.tuple([
-		z.tuple([NonNegativeInt, NonNegativeInt]).nullable(),
-		z.tuple([NonNegativeInt, NonNegativeInt]).nullable(),
-		z.tuple([NonNegativeInt, NonNegativeInt]).nullable(),
-	]),
-	currentGame: GameState,
-	currentSet: z.number().int().min(1).max(3),
-	matchWinner: Player.optional(),
-})
-type MatchState = z.infer<typeof MatchState>
-
-/* ============================= */
-/*   🎾 CORE SCORING FUNCTIONS    */
-/* ============================= */
-
-// Map to increment points for non-deuce game states
-const nextPoint: Record<PreDeucePoint, PreDeucePoint> = {
-	LOVE: 'FIFTEEN',
-	FIFTEEN: 'THIRTY',
-	THIRTY: 'FORTY',
-	FORTY: 'FORTY', // stays at 40 in Normal state, handled separately
-}
-
-// Helper type to describe a game's outcome when a point is scored
-type GameWinnerOrContinue = 'Player1Wins' | 'Player2Wins' | 'ContinueGame'
+import {
+  type Player,
+	type MatchState,
+	type PreDeucePoint,
+	type GameWinnerOrContinue,
+	type GameState,
+	GameState as GameStateSchema,
+	nextPoint,
+	type ScorePair,
+	Msg,
+} from './tennis.types'
 
 /**
  * Main orchestrator for scoring a point.
@@ -181,7 +120,7 @@ export const scorePoint = (state: MatchState, pointWinner: Player): MatchState =
 		const updatedMatch = updateSetAfterGame(state, newGameState.gameWinner)
 		const setIndex = state.currentSet - 1
 		if (state.currentGame.kind === 'Tiebreak') {
-			const finalTiebreakScore: [number, number] = [
+			const finalTiebreakScore: ScorePair = [
 				state.currentGame.p1Points + (newGameState.gameWinner === 'Player1' ? 1 : 0),
 				state.currentGame.p2Points + (newGameState.gameWinner === 'Player2' ? 1 : 0),
 			]
@@ -216,7 +155,7 @@ export const scorePoint = (state: MatchState, pointWinner: Player): MatchState =
 
 /** Start a new standard game at LOVE-LOVE */
 export const startGame = (): GameState => {
-	return GameState.parse({
+	return GameStateSchema.parse({
 		kind: 'Normal',
 		player1Point: 'LOVE',
 		player2Point: 'LOVE',
@@ -271,67 +210,14 @@ export const startMatch = (): MatchState => {
 }
 
 /* ============================= */
-/*   ⚙️ SET HELPERS              */
-/* ============================= */
-
-// ✅ Pure helper: returns updated set score tuple.
-const updateSetWithGameWinner = (
-	[p1, p2]: [number, number],
-	winner: Player
-): [number, number] => (winner === 'Player1' ? [p1 + 1, p2] : [p1, p2 + 1])
-
-// Determines if someone has won the set.
-const setWinner = ([p1, p2]: [number, number]): Player | undefined =>
-  match<{ kind: string }, Player | undefined>(
-    { kind: p1 >= 6 || p2 >= 6 ? 'Eligible' : 'Undecided' },
-    {
-      Eligible: () =>
-        (p1 >= 6 && p1 - p2 >= 2) || (p1 === 7 && p2 === 6)
-          ? 'Player1'
-          : (p2 >= 6 && p2 - p1 >= 2) || (p2 === 7 && p1 === 6)
-          ? 'Player2'
-          : undefined,
-      Undecided: () => undefined,
-    }
-  )
-
-/* ============================= */
-/*   ⚙️ MATCH HELPERS            */
-/* ============================= */
-
-// Determines if someone has won the match (best of 3 sets).
-const didPlayerWinMatch = (sets: [number, number][]): Player | undefined =>
-  match<{ kind: string }, Player | undefined>(
-    { kind: sets.map(setWinner).join('-') },
-    {
-      // Player1 wins if two or more sets belong to Player1
-      _: () => {
-        const results = sets.map(setWinner)
-        const [p1, p2] = [
-          results.filter(r => r === 'Player1').length,
-          results.filter(r => r === 'Player2').length,
-        ]
-        return p1 >= 2 ? 'Player1' : p2 >= 2 ? 'Player2' : undefined
-      },
-    }
-  )
-
-/* ============================= */
 /*   🎾 ELM-STYLE UPDATE         */
 /* ============================= */
 
-// Elm-style message type delivering UI intents.
-export const Msg = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('PointScored'), player: Player }),
-  z.object({ kind: z.literal('NewGame') }),
-  z.object({ kind: z.literal('NewMatch') }),
-])
-export type Msg = z.infer<typeof Msg>
-
 // Elm-style update: consumes a Msg and returns the next state.
 export const update = (state: MatchState, msg: Msg): MatchState =>
-  match<Msg, MatchState>(msg, {
-    PointScored: ({ player }) => scorePoint(state, player),
-    NewGame: () => ({ ...state, currentGame: startGame() }),
-    NewMatch: () => startMatch(),
-  })
+	match<Msg, MatchState>(msg, {
+		PointScored: ({ player }) => scorePoint(state, player),
+		NewGame: () => ({ ...state, currentGame: startGame() }),
+		NewMatch: () => startMatch(),
+	})
+

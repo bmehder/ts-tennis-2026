@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { startMatch, update, type Player } from '$lib/tennis'
+	import { startMatch, update } from '$lib/tennis'
+	import { type Player } from '$lib/tennis.types'
 
 	let matchState = $state(startMatch())
 
