@@ -22,7 +22,7 @@ import {
 export const startMatch = (): MatchState => {
 	return {
 		sets: [
-			[0, 0],
+			[5, 5],
 			[0, 0],
 			[0, 0],
 		],
@@ -64,7 +64,8 @@ export const scorePoint = (state: MatchState, pointWinner: Player): MatchState =
 
 	// 👇 5. If we were in a tiebreak, finalize tiebreak logic
 	if (state.currentGame.kind === 'Tiebreak') {
-		return finalizeTiebreak(updatedMatch, newGameState.gameWinner)
+		const finishedSetIndex = state.currentSet - 1
+		return finalizeTiebreak(updatedMatch, newGameState.gameWinner, finishedSetIndex)
 	}
 
 	// 🎚 6. If the set is now 6–6, start a tiebreak

@@ -144,32 +144,28 @@ export const didPlayerWinMatch = (sets: ScorePair[]): Player | undefined => {
  *
  * @param match - The current match state.
  * @param gameWinner - The player who won the tiebreak game.
+ * @param setIndex - The index of the set to update the tiebreak score for.
  * @returns The updated match state with the finalized tiebreak score and a new game started.
  */
 export const finalizeTiebreak = (
-	match: MatchState,
-	gameWinner: Player
+  match: MatchState,
+  gameWinner: Player,
+  setIndex: number
 ): MatchState => {
-	const setIndex = match.currentSet - 1
-	const tb = match.currentGame
+  const tb = match.currentGame
 
-	// ✅ Type guard — ensure this is really a Tiebreak state
-	if (tb.kind !== 'Tiebreak') {
-		// Not supposed to happen — safer to just return state unchanged
-		return match
-	}
+  if (tb.kind !== 'Tiebreak') return match
 
-	// ✅ Now TypeScript knows tb is a Tiebreak
-	const finalScore: ScorePair = [
-		tb.p1Points + (gameWinner === 'Player1' ? 1 : 0),
-		tb.p2Points + (gameWinner === 'Player2' ? 1 : 0),
-	]
+  const finalScore: ScorePair = [
+    tb.p1Points + (gameWinner === 'Player1' ? 1 : 0),
+    tb.p2Points + (gameWinner === 'Player2' ? 1 : 0),
+  ]
 
-	return {
-		...match,
-		tiebreaks: match.tiebreaks.map((t, i) =>
-			i === setIndex ? finalScore : t
-		) as MatchState['tiebreaks'],
-		currentGame: startGame(),
-	}
+  return {
+    ...match,
+    tiebreaks: match.tiebreaks.map((t, i) =>
+      i === setIndex ? finalScore : t
+    ) as MatchState['tiebreaks'],
+    currentGame: startGame(),
+  }
 }
